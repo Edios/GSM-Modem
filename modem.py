@@ -1,5 +1,5 @@
 # import serial
-# TODO: Consider changing time.wait to utime
+# TODO: Consider changing all time.wait to utime
 import time
 import utime
 import re
@@ -11,7 +11,7 @@ class GSMModem:
         self.port = port
         self.uart_baudrate = uart_baudrate
         # TODO: Change write method and test it
-        self.uart = UART(self.port, baudrate=self.uart_baudrate)
+        self.uart = UART(self.port, self.uart_baudrate)
 
         self.last_command = None
         self.last_number = None
@@ -22,30 +22,18 @@ class GSMModem:
         # if last command and 2x \n in output
         #    Clear command (all before \n)
         # Replace all \n \r with ""
-
+        if data == None: return data
         decoded_data = data.decode()
         if decoded_data.count('\n') == 2:
             decoded_data = decoded_data.split('\n')[1]
         return decoded_data.replace("\r", "").replace("\n", "")
 
-    def write_command_and_return_response(self, command, timeout_ms=2000, printresponse=False):
+    def write_command_and_return_response(self, command, time_to_wait=1, printresponse=False):
         self.last_command = command
-
-        # self.uart.timeout = timeout
-
-        # self.uart.read(self.uart.inWaiting())
-        # Pico uart :
-        # self.uart.txdone()
-
-        # self.uart.flushInput()
-        # self.uart.flushOutput()
-        # Pico uart :
         self.uart.flush()
-
         self.uart.write(command)
-
+        utime.sleep(time_to_wait)
         response = self.read()
-
         return response
 
     def read(self):
@@ -64,12 +52,6 @@ class GSMModem:
     def getEcho(self):
         response = self.write_command_and_return_response(b'AT\r', 1)
 
-        if response == 'ERROR':
-            # Handle error
-            response = response
-        else:
-            response = response[1]
-
         return response
 
     """
@@ -84,12 +66,7 @@ class GSMModem:
     def getCSQ(self):
         response = self.write_command_and_return_response(b'AT+CSQ\r', 1)
 
-        if response == 'ERROR':
-            # Handle error
-            response = response
-        else:
-            response = response[1]
-            response = re.search(r"\+CSQ: (\d*),\d*", response).group(1)
+        response = re.search(r"\+CSQ: (\d*),\d*", response).group(1)
 
         return response
 
