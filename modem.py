@@ -6,7 +6,14 @@ import re
 from machine import UART
 
 
-class GSMModem:
+class PicoSimcom868:
+    """
+    A class representing the Simcom SIM868 module, connected to a Raspberry Pi Pico.
+    Implementation is based on usage of Micropython.
+
+    Code based on implementation of @EvilPeanut: https://github.com/EvilPeanut/GSM-Modem
+
+    """
     def __init__(self, port=0, uart_baudrate=115200):
         self.port = port
         self.uart_baudrate = uart_baudrate
@@ -22,18 +29,21 @@ class GSMModem:
         # if last command and 2x \n in output
         #    Clear command (all before \n)
         # Replace all \n \r with ""
-        if data == None: return data
+        # TODO: Find better way to handle None
+        if data is None: return data
+
         decoded_data = data.decode()
         if decoded_data.count('\n') == 2:
             decoded_data = decoded_data.split('\n')[1]
         return decoded_data.replace("\r", "").replace("\n", "")
 
-    def write_command_and_return_response(self, command, time_to_wait=1, printresponse=False):
+    def write_command_and_return_response(self, command, time_to_wait=1, print_response=True):
         self.last_command = command
         self.uart.flush()
         self.uart.write(command)
         utime.sleep(time_to_wait)
         response = self.read()
+        if print_response: print(f"Response:\n{response}")
         return response
 
     def read(self):
@@ -43,7 +53,8 @@ class GSMModem:
             serial_read_raw_data = self.uart.read()
         else:
             raise Exception("UART tx not done, could not read anything from serial.")
-        return self.parse_serial_raw_data(serial_read_raw_data)
+        if serial_read_raw_data:
+            return self.parse_serial_raw_data(serial_read_raw_data)
 
     """
 	Return echo
@@ -54,18 +65,16 @@ class GSMModem:
 
         return response
 
-    """
-	Return signal quality
-	0 -115 dBm or less
-	1 -111 dBm
-	2...30 -110... -54 dBm
-	31 -52 dBm or greater
-	99 not known or not detectable
-	"""
-
     def getCSQ(self):
+        """
+        Return signal quality
+        0 -115 dBm or less
+        1 -111 dBm
+        2...30 -110... -54 dBm
+        31 -52 dBm or greater
+        99 not known or not detectable
+        """
         response = self.write_command_and_return_response(b'AT+CSQ\r', 1)
-
         response = re.search(r"\+CSQ: (\d*),\d*", response).group(1)
 
         return response
@@ -108,12 +117,6 @@ class GSMModem:
         # Send message
         response = self.write_command_and_return_response(message + '\r\x1a', 1)
 
-        if response == 'ERROR':
-            # Handle error
-            response = response
-        else:
-            response = response[1]
-
         return response
 
     """
@@ -130,11 +133,15 @@ class GSMModem:
 	"""
 
     def getGPSData(self):
+        def gps_coordinates_accuried(raw_response) -> bool:
+            pass
+
         raw = self.write_command_and_return_response(b'AT+CGNSINF\r', 10)
 
-        raw = raw[1]
-        if (re.match(r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", raw)):
-            raw = re.search(r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", raw)
+        # raw = raw[1]
+        # TODO: ADD if with internal method
+        # if (re.match(r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", raw)):
+        #     raw = re.search(r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", raw)
 
             response = {}
 
