@@ -1,28 +1,46 @@
 # import serial
+# TODO: Consider changing time.wait to utime
 import time
+import utime
 import re
-import machine
+from machine import UART
 
 
 class GSMModem:
     def __init__(self, port=0, uart_baudrate=115200):
         self.port = port
         self.uart_baudrate = uart_baudrate
-
-        self.uart = machine.UART(self.port, baudrate=self.uart_baudrate)
+        # TODO: Change write method and test it
+        self.uart = UART(self.port, baudrate=self.uart_baudrate)
 
         self.last_command = None
         self.last_number = None
 
-    def write(self, command, timeout=5, printresponse=False):
+    @staticmethod
+    def parse_serial_raw_data(data) -> str:
+        # Decode bytes to string
+        # if last command and 2x \n in output
+        #    Clear command (all before \n)
+        # Replace all \n \r with ""
+
+        decoded_data = data.decode()
+        if decoded_data.count('\n') == 2:
+            decoded_data = decoded_data.split('\n')[1]
+        return decoded_data.replace("\r", "").replace("\n", "")
+
+    def write_command_and_return_response(self, command, timeout_ms=2000, printresponse=False):
         self.last_command = command
 
-        self.uart.timeout = timeout
+        # self.uart.timeout = timeout
 
-        self.uart.read(self.uart.inWaiting())
+        # self.uart.read(self.uart.inWaiting())
+        # Pico uart :
+        # self.uart.txdone()
 
-        self.uart.flushInput()
-        self.uart.flushOutput()
+        # self.uart.flushInput()
+        # self.uart.flushOutput()
+        # Pico uart :
+        self.uart.flush()
 
         self.uart.write(command)
 
@@ -31,27 +49,20 @@ class GSMModem:
         return response
 
     def read(self):
-        response = []
-
-        while True:
-            ser_bytes = self.uart.readline()
-
-            ser_bytes = ser_bytes.replace('\n', '')
-            ser_bytes = ser_bytes.replace('\r', '')
-
-            if len(ser_bytes) == 0:
-                break
-            else:
-                response.append(ser_bytes)
-
-        return response
+        # Add sleep to make sure that respond was transmitted
+        utime.sleep(0.1)
+        if self.uart.txdone():
+            serial_read_raw_data = self.uart.read()
+        else:
+            raise Exception("UART tx not done, could not read anything from serial.")
+        return self.parse_serial_raw_data(serial_read_raw_data)
 
     """
 	Return echo
 	"""
 
     def getEcho(self):
-        response = self.write(b'AT\r', 1)
+        response = self.write_command_and_return_response(b'AT\r', 1)
 
         if response == 'ERROR':
             # Handle error
@@ -71,7 +82,7 @@ class GSMModem:
 	"""
 
     def getCSQ(self):
-        response = self.write(b'AT+CSQ\r', 1)
+        response = self.write_command_and_return_response(b'AT+CSQ\r', 1)
 
         if response == 'ERROR':
             # Handle error
@@ -94,7 +105,7 @@ class GSMModem:
                     print(response)
                     regex = re.search(r'\+CMTI: "(\w+)",(\d+)', response[0])
                     msg_count = regex.group(2)
-                    response = self.write(b'AT+CMGR=' + msg_count + '\r')
+                    response = self.write_command_and_return_response(b'AT+CMGR=' + msg_count + '\r')
                     print(response)
                 if len(response) == 3:
                     # print(response)
@@ -109,16 +120,16 @@ class GSMModem:
 
     def sendText(self, number, message):
         # Set the format of messages to Text mode
-        self.write(b'AT+CMGF=1\r', 1)
+        self.write_command_and_return_response(b'AT+CMGF=1\r', 1)
 
         # Select the GSM 7 bit default alphabet
-        self.write(b'AT+CSCS="GSM"\r', 1)
+        self.write_command_and_return_response(b'AT+CSCS="GSM"\r', 1)
 
         # Start sending
-        self.write(b'AT+CMGS="' + number + '"\r', 1)
+        self.write_command_and_return_response(b'AT+CMGS="' + number + '"\r', 1)
 
         # Send message
-        response = self.write(message + '\r\x1a', 1)
+        response = self.write_command_and_return_response(message + '\r\x1a', 1)
 
         if response == 'ERROR':
             # Handle error
@@ -133,7 +144,7 @@ class GSMModem:
 	"""
 
     def setGPSOn(self):
-        response = self.write(b'AT+CGNSPWR=1\r', 5)
+        response = self.write_command_and_return_response(b'AT+CGNSPWR=1\r', 5)
         time.sleep(30)
         return response
 
@@ -142,7 +153,7 @@ class GSMModem:
 	"""
 
     def getGPSData(self):
-        raw = self.write(b'AT+CGNSINF\r', 10)
+        raw = self.write_command_and_return_response(b'AT+CGNSINF\r', 10)
 
         raw = raw[1]
         if (re.match(r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", raw)):
@@ -168,19 +179,19 @@ class GSMModem:
 	"""
 
     def httpPost(self, url):
-        self.write(b'AT+HTTPINIT\r')
+        self.write_command_and_return_response(b'AT+HTTPINIT\r')
 
         time.sleep(1)
 
-        self.write(b'AT+HTTPPARA="URL","' + url + '"\r')
+        self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + '"\r')
 
         time.sleep(1)
 
-        response = self.write(b'AT+HTTPACTION=0\r')
+        response = self.write_command_and_return_response(b'AT+HTTPACTION=0\r')
 
         time.sleep(1)
 
-        self.write(b'AT+HTTPTERM\r')
+        self.write_command_and_return_response(b'AT+HTTPTERM\r')
 
         return str(response)
 
@@ -189,29 +200,29 @@ class GSMModem:
 	"""
 
     def httpInit(self):
-        self.write(b'AT+HTTPPARA="CID",1\r')
+        self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
 
         time.sleep(1)
 
         # Vodaphone settings
-        self.write(b'AT+SAPBR=3,1,"CONTYPE","GPRS"\r')
+        self.write_command_and_return_response(b'AT+SAPBR=3,1,"CONTYPE","GPRS"\r')
 
         time.sleep(1)
 
-        self.write(b'AT+SAPBR=3,1,"APN","pp.vodafone.co.uk"\r')
+        self.write_command_and_return_response(b'AT+SAPBR=3,1,"APN","pp.vodafone.co.uk"\r')
 
         time.sleep(1)
 
-        self.write(b'AT+SAPBR=3,1,"USER","wap"\r')
+        self.write_command_and_return_response(b'AT+SAPBR=3,1,"USER","wap"\r')
 
         time.sleep(1)
 
-        self.write(b'AT+SAPBR=3,1,"PWD","wap"\r')
+        self.write_command_and_return_response(b'AT+SAPBR=3,1,"PWD","wap"\r')
 
         time.sleep(1)
 
-        self.write(b'AT+SAPBR=2,1\r')
+        self.write_command_and_return_response(b'AT+SAPBR=2,1\r')
 
         time.sleep(1)
 
-        self.write(b'AT+SAPBR=1,1\r')
+        self.write_command_and_return_response(b'AT+SAPBR=1,1\r')
