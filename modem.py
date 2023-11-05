@@ -128,29 +128,25 @@ class PicoSimcom868:
         time.sleep(30)
         return response
 
-    """
-	Get GPS data
-	"""
-
     def getGPSData(self):
-        def gps_coordinates_accuried(raw_response) -> bool:
-            pass
-
-        raw = self.write_command_and_return_response(b'AT+CGNSINF\r', 10)
-
-        # raw = raw[1]
-        # TODO: ADD if with internal method
-        # if (re.match(r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", raw)):
-        #     raw = re.search(r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", raw)
-
+        """
+        Retrieves the current location using the GNSS module.
+        :return: A string representing the geographic coordinates (latitude and longitude) of the current location.
+        """
+        def gps_coordinates_acquired(command_response) -> bool:
+            return ',,,,' in command_response
+        # TODO: Add class field for gps init / initialize gps here if needed (+wait for gps fix)
+        gps_command_response = self.write_command_and_return_response(b'AT+CGNSINF\r', 10)
+        if gps_coordinates_acquired(gps_command_response):
+            #re.search(r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", raw)
             response = {}
-
-            dt = raw.group(3)
+            regex_search_result = re.search(r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", gps_command_response)
+            dt = regex_search_result.group(3)
             response['datetime'] = dt[:4] + '-' + dt[4:6] + '-' + dt[6:8] + ' ' + dt[8:10] + ':' + dt[10:12] + ':' + dt[
                                                                                                                      12:14]
-            response['latitude'] = raw.group(4)
-            response['longitude'] = raw.group(5)
-            response['altitude'] = raw.group(6)
+            response['latitude'] = regex_search_result.group(4)
+            response['longitude'] = regex_search_result.group(5)
+            response['altitude'] = regex_search_result.group(6)
         else:
             print("Invalid GPS data, trying again in 10 seconds")
             time.sleep(10)
