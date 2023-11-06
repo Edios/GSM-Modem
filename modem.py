@@ -14,12 +14,14 @@ class PicoSimcom868:
     Code based on implementation of @EvilPeanut: https://github.com/EvilPeanut/GSM-Modem
 
     """
+
     def __init__(self, port=0, uart_baudrate=115200):
         self.port = port
         self.uart_baudrate = uart_baudrate
         # TODO: Change write method and test it
         self.uart = UART(self.port, self.uart_baudrate)
 
+        self.gps_power_state = False
         self.last_command = None
         self.last_number = None
 
@@ -123,24 +125,41 @@ class PicoSimcom868:
 	Turn GPS on
 	"""
 
-    def setGPSOn(self):
+    def set_gps_on(self):
+        print("Setting GPS on")
         response = self.write_command_and_return_response(b'AT+CGNSPWR=1\r', 5)
-        time.sleep(30)
+        if self.gps_power_state:
+            print("GPS already set on")
+        else:
+            print("Wait 30 seconds for GPS fix")
+            time.sleep(30)
+        self.gps_power_state = True
         return response
 
-    def getGPSData(self):
+    def set_gps_off(self):
+        print("Setting GPS off")
+        response = self.write_command_and_return_response(b'AT+CGNSPWR=0\r', 5)
+        if not self.gps_power_state:
+            print("GPS already set off")
+        self.gps_power_state = False
+        return response
+
+    def get_gps_data(self):
         """
         Retrieves the current location using the GNSS module.
+        Set GPS module power on if it's not turned on.
         :return: A string representing the geographic coordinates (latitude and longitude) of the current location.
         """
+
         def gps_coordinates_acquired(command_response) -> bool:
             return ',,,,' in command_response
-        # TODO: Add class field for gps init / initialize gps here if needed (+wait for gps fix)
+
+        if not self.gps_power_state: self.set_gps_on()
         gps_command_response = self.write_command_and_return_response(b'AT+CGNSINF\r', 10)
         if gps_coordinates_acquired(gps_command_response):
-            #re.search(r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", raw)
             response = {}
-            regex_search_result = re.search(r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", gps_command_response)
+            regex_search_result = re.search(
+                r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", gps_command_response)
             dt = regex_search_result.group(3)
             response['datetime'] = dt[:4] + '-' + dt[4:6] + '-' + dt[6:8] + ' ' + dt[8:10] + ':' + dt[10:12] + ':' + dt[
                                                                                                                      12:14]
@@ -150,8 +169,8 @@ class PicoSimcom868:
         else:
             print("Invalid GPS data, trying again in 10 seconds")
             time.sleep(10)
-            return self.getGPSData()
-
+            return self.get_gps_data()
+        print(f"Acquired coordinates: {response}")
         return response
 
     """
