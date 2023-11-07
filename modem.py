@@ -110,7 +110,7 @@ class PicoSimcom868:
                     self.last_number = re.search(r'\+CMGR:\s"\w+\s\w+","(\+\d+)"', response[1]).group(1)
                     response = response[2]
                     return response
-            time.sleep(1)
+            utime.sleep(1)
 
     """
 	Send text
@@ -142,7 +142,7 @@ class PicoSimcom868:
             print("GPS already set on")
         else:
             print("Wait 30 seconds for GPS fix")
-            time.sleep(30)
+            utime.sleep(30)
         self.gps_power_state = True
         return response
 
@@ -178,7 +178,7 @@ class PicoSimcom868:
             response['altitude'] = regex_search_result.group(6)
         else:
             print("Invalid GPS data, trying again in 10 seconds")
-            time.sleep(10)
+            utime.sleep(10)
             return self.get_gps_data()
         print(f"Acquired coordinates: {response}")
         return response
@@ -190,15 +190,15 @@ class PicoSimcom868:
     def httpPost(self, url):
         self.write_command_and_return_response(b'AT+HTTPINIT\r')
 
-        time.sleep(1)
+        utime.sleep(1)
 
         self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + '"\r')
 
-        time.sleep(1)
+        utime.sleep(1)
 
         response = self.write_command_and_return_response(b'AT+HTTPACTION=0\r')
 
-        time.sleep(1)
+        utime.sleep(1)
 
         self.write_command_and_return_response(b'AT+HTTPTERM\r')
 
@@ -211,27 +211,27 @@ class PicoSimcom868:
     def httpInit(self):
         self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
 
-        time.sleep(1)
+        utime.sleep(1)
 
         # Vodaphone settings
         self.write_command_and_return_response(b'AT+SAPBR=3,1,"CONTYPE","GPRS"\r')
 
-        time.sleep(1)
+        utime.sleep(1)
 
         self.write_command_and_return_response(b'AT+SAPBR=3,1,"APN","pp.vodafone.co.uk"\r')
 
-        time.sleep(1)
+        utime.sleep(1)
 
         self.write_command_and_return_response(b'AT+SAPBR=3,1,"USER","wap"\r')
 
-        time.sleep(1)
+        utime.sleep(1)
 
         self.write_command_and_return_response(b'AT+SAPBR=3,1,"PWD","wap"\r')
 
-        time.sleep(1)
+        utime.sleep(1)
 
         self.write_command_and_return_response(b'AT+SAPBR=2,1\r')
 
-        time.sleep(1)
+        utime.sleep(1)
 
         self.write_command_and_return_response(b'AT+SAPBR=1,1\r')
