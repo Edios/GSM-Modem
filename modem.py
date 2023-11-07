@@ -3,7 +3,7 @@
 import time
 import utime
 import re
-from machine import UART
+import machine
 
 
 class PicoSimcom868:
@@ -15,15 +15,25 @@ class PicoSimcom868:
 
     """
 
-    def __init__(self, port=0, uart_baudrate=115200):
+    def __init__(self, port=0, uart_baudrate=115200, module_power_gpio_pin=14):
         self.port = port
         self.uart_baudrate = uart_baudrate
+        self.module_power_gpio_pin = module_power_gpio_pin
         # TODO: Change write method and test it
-        self.uart = UART(self.port, self.uart_baudrate)
+        self.uart = machine.UART(self.port, self.uart_baudrate)
 
+        self.module_power_state = False
         self.gps_power_state = False
         self.last_command = None
         self.last_number = None
+
+    def change_module_power_state(self):
+        print(f"Toggle module power state. Changed from {self.module_power_state} to {not self.module_power_state}")
+        power_pin = machine.Pin(self.module_power_gpio_pin, machine.Pin.OUT)
+        power_pin.value(1)
+        utime.sleep(1)
+        power_pin.value(0)
+        self.module_power_state = not self.module_power_state
 
     @staticmethod
     def parse_serial_raw_data(data) -> str:
