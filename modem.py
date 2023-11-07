@@ -1,6 +1,3 @@
-# import serial
-# TODO: Consider changing all time.wait to utime
-import time
 import utime
 import re
 import machine
