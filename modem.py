@@ -34,10 +34,6 @@ class PicoSimcom868:
 
     @staticmethod
     def parse_serial_raw_data(data) -> str:
-        # Decode bytes to string
-        # if last command and 2x \n in output
-        #    Clear command (all before \n)
-        # Replace all \n \r with ""
         # TODO: Find better way to handle None
         if data is None: return data
 
@@ -47,6 +43,7 @@ class PicoSimcom868:
         return decoded_data.replace("\r", "").replace("\n", "")
 
     def write_command_and_return_response(self, command, time_to_wait=1, print_response=True):
+        if not self.module_power_state: self.change_module_power_state()
         self.last_command = command
         self.uart.flush()
         self.uart.write(command)
@@ -56,6 +53,7 @@ class PicoSimcom868:
         return response
 
     def read(self):
+        if not self.module_power_state: self.change_module_power_state()
         # Add sleep to make sure that respond was transmitted
         utime.sleep(0.1)
         if self.uart.txdone():
