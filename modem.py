@@ -25,6 +25,12 @@ class PicoSimcom868:
         self.last_number = None
 
     def change_module_power_state(self):
+        """
+        Change power level of the modem module.
+        Power level value would be stored in variable self.module_power_state.
+        Assume that module power is turned off by default.
+        :return:
+        """
         print(f"Toggle module power state. Changed from {self.module_power_state} to {not self.module_power_state}")
         power_pin = machine.Pin(self.module_power_gpio_pin, machine.Pin.OUT)
         power_pin.value(1)
@@ -48,11 +54,11 @@ class PicoSimcom868:
         self.uart.flush()
         self.uart.write(command)
         utime.sleep(time_to_wait)
-        response = self.read()
+        response = self.read_uart_response()
         if print_response: print(f"Response:\n{response}")
         return response
 
-    def read(self):
+    def read_uart_response(self):
         if not self.module_power_state: self.change_module_power_state()
         # Add sleep to make sure that respond was transmitted
         utime.sleep(0.1)
@@ -63,16 +69,15 @@ class PicoSimcom868:
         if serial_read_raw_data:
             return self.parse_serial_raw_data(serial_read_raw_data)
 
-    """
-	Return echo
-	"""
-
-    def getEcho(self):
+    def get_echo(self):
+        """
+        Return echo
+        """
         response = self.write_command_and_return_response(b'AT\r', 1)
 
         return response
 
-    def getCSQ(self):
+    def get_gsm_signal_quality(self):
         """
         Return signal quality
         0 -115 dBm or less
@@ -86,13 +91,14 @@ class PicoSimcom868:
 
         return response
 
-    """
-	Get text message
-	"""
 
-    def getText(self):
+
+    def get_text_messages(self):
+        """
+        Get text message
+        """
         while True:
-            response = self.read()
+            response = self.read_uart_response()
             if len(response) > 0:
                 if response[0].startswith('+CMTI'):
                     print(response)
