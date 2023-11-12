@@ -91,8 +91,6 @@ class PicoSimcom868:
 
         return response
 
-
-
     def get_text_messages(self):
         """
         Get text message
@@ -159,14 +157,24 @@ class PicoSimcom868:
         """
         Retrieves the current location using the GNSS module.
         Set GPS module power on if it's not turned on.
+
+
+
         :return: A string representing the geographic coordinates (latitude and longitude) of the current location.
         """
 
-        def gps_coordinates_acquired(command_response) -> bool:
-            return ',,,,' in command_response
+        def gps_coordinates_acquired(command_response: str) -> bool:
+            """
+            GPS coordinates are marked as acquired if AT+CGNSING command returned output without series of blank fields.
+            Example of uncorrect AT+CGNSING output:
+                +CGNSINF: 0,,,,,,,,,,,,,,,,,,,,
+            :param command_response:
+            :return: state if
+            """
+            return ',,,,' not in command_response
 
         if not self.gps_power_state: self.set_gps_on()
-        gps_command_response = self.write_command_and_return_response(b'AT+CGNSINF\r', 10)
+        gps_command_response = self.write_command_and_return_response(b'AT+CGNSINF\r\n', 10)
         if gps_coordinates_acquired(gps_command_response):
             response = {}
             regex_search_result = re.search(
@@ -188,6 +196,7 @@ class PicoSimcom868:
 	HTTP Post
 	"""
 
+    # TODO: Method refactor
     def httpPost(self, url):
         self.write_command_and_return_response(b'AT+HTTPINIT\r')
 
@@ -209,6 +218,7 @@ class PicoSimcom868:
 	GPRS Init
 	"""
 
+    # TODO: Method refactor
     def httpInit(self):
         self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
 
