@@ -1,3 +1,5 @@
+from collections import namedtuple
+
 import utime
 import re
 import machine
@@ -162,7 +164,10 @@ class PicoSimcom868:
 
         :return: A string representing the geographic coordinates (latitude and longitude) of the current location.
         """
-
+        def get_coordinates_tuple_obj():
+            # TODO: Use this sketch
+            GpsData = namedtuple("GpsData", ("datetime", "latitude", "longitude", "altitude"))
+            return GpsData
         def gps_coordinates_acquired(command_response: str) -> bool:
             """
             GPS coordinates are marked as acquired if AT+CGNSING command returned output without series of blank fields.
