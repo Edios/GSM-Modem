@@ -111,6 +111,7 @@ class PicoSimcom868:
         31 -52 dBm or greater
         99 not known or not detectable
         """
+        # TODO: Add enum for signal quality
         response = self.write_command_and_return_response(b'AT+CSQ\r', 1)
         response = re.search(r"\+CSQ: (\d*),\d*", response).group(1)
 
@@ -136,11 +137,11 @@ class PicoSimcom868:
                     return response
             utime.sleep(1)
 
-    """
-	Send text
-	"""
+    def send_text_message(self, number:str, message:str):
+        """
+        Send text message to given number in E.164 format.
+        """
 
-    def sendText(self, number, message):
         # Set the format of messages to Text mode
         self.write_command_and_return_response(b'AT+CMGF=1\r', 1)
 
