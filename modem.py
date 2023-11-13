@@ -5,12 +5,6 @@ import re
 import machine
 
 
-def get_coordinates_tuple_obj():
-    # TODO: Use this sketch
-    GpsData = namedtuple("GpsData", ("datetime", "latitude", "longitude", "altitude"))
-    return GpsData
-
-
 class GpsData:
     """
     Data class for storing obtained datetime and geographic location data.
