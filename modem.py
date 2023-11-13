@@ -5,6 +5,35 @@ import re
 import machine
 
 
+def get_coordinates_tuple_obj():
+    # TODO: Use this sketch
+    GpsData = namedtuple("GpsData", ("datetime", "latitude", "longitude", "altitude"))
+    return GpsData
+
+
+class GpsData:
+    """
+    Data class for storing obtained datetime and geographic location data.
+    """
+    datetime: str
+    latitude: str
+    longitude: str
+    altitude: str
+
+    def __init__(self, latitude, longitude, datetime=None, altitude=None):
+        self.latitude = latitude
+        self.longitude = longitude
+        self.datetime = datetime
+        self.altitude = altitude
+
+    def get_coordinates(self) -> tuple:
+        """
+        Method for obtaining tuple of latitude and longitude in tuple form.
+        :return: Tuple of latitude(0) and longitude(1)
+        """
+        return self.latitude, self.longitude
+
+
 class PicoSimcom868:
     """
     A class representing the Simcom SIM868 module, connected to a Raspberry Pi Pico.
@@ -164,13 +193,11 @@ class PicoSimcom868:
 
         :return: A string representing the geographic coordinates (latitude and longitude) of the current location.
         """
-        def get_coordinates_tuple_obj():
-            # TODO: Use this sketch
-            GpsData = namedtuple("GpsData", ("datetime", "latitude", "longitude", "altitude"))
-            return GpsData
+
         def gps_coordinates_acquired(command_response: str) -> bool:
             """
             GPS coordinates are marked as acquired if AT+CGNSING command returned output without series of blank fields.
+
             Example of uncorrect AT+CGNSING output:
                 +CGNSINF: 0,,,,,,,,,,,,,,,,,,,,
             :param command_response:
