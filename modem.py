@@ -137,7 +137,7 @@ class PicoSimcom868:
                     return response
             utime.sleep(1)
 
-    def send_text_message(self, number:str, message:str):
+    def send_text_message(self, number: str, message: str):
         """
         Send text message to given number in E.164 format.
         """
@@ -156,11 +156,10 @@ class PicoSimcom868:
 
         return response
 
-    """
-	Turn GPS on
-	"""
-
     def set_gps_on(self):
+        """
+        Turn module GPS on
+        """
         print("Setting GPS on")
         response = self.write_command_and_return_response(b'AT+CGNSPWR=1\r', 5)
         if self.gps_power_state:
