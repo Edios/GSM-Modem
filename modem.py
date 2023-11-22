@@ -20,6 +20,13 @@ class GpsData:
         self.datetime = datetime
         self.altitude = altitude
 
+    def __bool__(self):
+        """
+        Check if GPS data is not empty.
+        :return:
+        """
+        return all([self.latitude, self.longitude])
+
     def get_coordinates(self) -> tuple:
         """
         Method for obtaining tuple of latitude and longitude in tuple form.
@@ -41,7 +48,7 @@ class PicoSimcom868:
         self.port = port
         self.uart_baudrate = uart_baudrate
         self.module_power_gpio_pin = module_power_gpio_pin
-        # TODO: Change write method and test it
+        self.power_pin = machine.Pin(self.module_power_gpio_pin, machine.Pin.OUT)
         self.uart = machine.UART(self.port, self.uart_baudrate)
 
         self.module_power_state = False
@@ -57,10 +64,9 @@ class PicoSimcom868:
         :return:
         """
         print(f"Toggle module power state. Changed from {self.module_power_state} to {not self.module_power_state}")
-        power_pin = machine.Pin(self.module_power_gpio_pin, machine.Pin.OUT)
-        power_pin.value(1)
+        self.power_pin.value(1)
         utime.sleep(1)
-        power_pin.value(0)
+        self.power_pin.value(0)
         self.module_power_state = not self.module_power_state
 
     @staticmethod
@@ -178,13 +184,11 @@ class PicoSimcom868:
         self.gps_power_state = False
         return response
 
-    def get_gps_data(self):
+    # TODO: Separate method for CGNSINF
+    def get_gps_data(self) -> GpsData:
         """
         Retrieves the current location using the GNSS module.
         Set GPS module power on if it's not turned on.
-
-
-
         :return: A string representing the geographic coordinates (latitude and longitude) of the current location.
         """
 
@@ -194,28 +198,34 @@ class PicoSimcom868:
 
             Example of uncorrect AT+CGNSING output:
                 +CGNSINF: 0,,,,,,,,,,,,,,,,,,,,
+            Example of correct AT+CGNSING output:
+                "+CGNSINF: 1,1,20231122111000.000,50.887232,19.231535,120.429,0.00,0.0,1,,1.0,1.4,0.9,,14,7,5,,31,,"
             :param command_response:
-            :return: state if
+            :return: state if there are in acquired command response
             """
-            return ',,,,' not in command_response
+            return ',,,,' not in command_response and command_response is not None
 
         if not self.gps_power_state: self.set_gps_on()
         gps_command_response = self.write_command_and_return_response(b'AT+CGNSINF\r\n', 10)
         if gps_coordinates_acquired(gps_command_response):
-            response = {}
-            regex_search_result = re.search(
-                r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", gps_command_response)
-            dt = regex_search_result.group(3)
-            response['datetime'] = dt[:4] + '-' + dt[4:6] + '-' + dt[6:8] + ' ' + dt[8:10] + ':' + dt[10:12] + ':' + dt[
-                                                                                                                     12:14]
-            response['latitude'] = regex_search_result.group(4)
-            response['longitude'] = regex_search_result.group(5)
-            response['altitude'] = regex_search_result.group(6)
+            # response = {}
+            # regex_search_result = re.search(
+            #     r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", gps_command_response)
+            # dt = regex_search_result.group(3)
+            # response['datetime'] = dt[:4] + '-' + dt[4:6] + '-' + dt[6:8] + ' ' + dt[8:10] + ':' + dt[10:12] + ':' + dt[
+            #                                                                                                          12:14]
+            # response['latitude'] = regex_search_result.group(4)
+            # response['longitude'] = regex_search_result.group(5)
+            # response['altitude'] = regex_search_result.group(6)
+            splitted_gps_command_response=gps_command_response.split(",")
+            response= GpsData(latitude=splitted_gps_command_response[3],longitude=splitted_gps_command_response[4],
+                              datetime=splitted_gps_command_response[2],altitude=splitted_gps_command_response[5])
         else:
             print("Invalid GPS data, trying again in 10 seconds")
             utime.sleep(10)
+            # TODO: Change it to do not use recurrence
             return self.get_gps_data()
-        print(f"Acquired coordinates: {response}")
+        print(f"Acquired coordinates: {gps_command_response}")
         return response
 
     """
