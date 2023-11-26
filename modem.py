@@ -47,8 +47,7 @@ class PicoSimcom868:
     def __init__(self, port=0, uart_baudrate=115200, module_power_gpio_pin=14):
         self.port = port
         self.uart_baudrate = uart_baudrate
-        self.module_power_gpio_pin = module_power_gpio_pin
-        self.power_pin = machine.Pin(self.module_power_gpio_pin, machine.Pin.OUT)
+        self.power_pin = machine.Pin(module_power_gpio_pin, mode=machine.Pin.OUT, pull=machine.Pin.PULL_DOWN)
         self.uart = machine.UART(self.port, self.uart_baudrate)
 
         self.module_power_state = False
@@ -56,18 +55,29 @@ class PicoSimcom868:
         self.last_command = None
         self.last_number = None
 
-    def change_module_power_state(self):
+    def change_module_power_state(self, force_state=None):
         """
         Change power level of the modem module.
         Power level value would be stored in variable self.module_power_state.
         Assume that module power is turned off by default.
+        :param force_state: Force module power state argument value
         :return:
         """
+
+        def pulse_module_power():
+            self.power_pin.value(1)
+            utime.sleep(1)
+            self.power_pin.value(0)
+
         print(f"Toggle module power state. Changed from {self.module_power_state} to {not self.module_power_state}")
-        self.power_pin.value(1)
-        utime.sleep(1)
-        self.power_pin.value(0)
-        self.module_power_state = not self.module_power_state
+        pulse_module_power()
+
+        if isinstance(force_state, bool):
+            print(f"Forced power state, state value will be: {force_state}")
+            self.module_power_state = force_state
+        else:
+            self.module_power_state = not self.module_power_state
+        utime.sleep(3)
 
     @staticmethod
     def parse_serial_raw_data(data) -> str:
@@ -92,7 +102,7 @@ class PicoSimcom868:
     def read_uart_response(self):
         if not self.module_power_state: self.change_module_power_state()
         # Add sleep to make sure that respond was transmitted
-        utime.sleep(0.1)
+        # utime.sleep(0.1)
         if self.uart.txdone():
             serial_read_raw_data = self.uart.read()
         else:
@@ -185,100 +195,102 @@ class PicoSimcom868:
         return response
 
     # TODO: Separate method for CGNSINF
-    def get_gps_data(self) -> GpsData:
-        """
-        Retrieves the current location using the GNSS module.
-        Set GPS module power on if it's not turned on.
-        :return: A string representing the geographic coordinates (latitude and longitude) of the current location.
-        """
 
-        def gps_coordinates_acquired(command_response: str) -> bool:
-            """
-            GPS coordinates are marked as acquired if AT+CGNSING command returned output without series of blank fields.
 
-            Example of uncorrect AT+CGNSING output:
-                +CGNSINF: 0,,,,,,,,,,,,,,,,,,,,
-            Example of correct AT+CGNSING output:
-                "+CGNSINF: 1,1,20231122111000.000,50.887232,19.231535,120.429,0.00,0.0,1,,1.0,1.4,0.9,,14,7,5,,31,,"
-            :param command_response:
-            :return: state if there are in acquired command response
-            """
-            return ',,,,' not in command_response and command_response is not None
-
-        if not self.gps_power_state: self.set_gps_on()
-        gps_command_response = self.write_command_and_return_response(b'AT+CGNSINF\r\n', 10)
-        if gps_coordinates_acquired(gps_command_response):
-            # response = {}
-            # regex_search_result = re.search(
-            #     r"\+CGNSINF: (\d+),(\d+),(\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+),(-?\d+?\.\d+)", gps_command_response)
-            # dt = regex_search_result.group(3)
-            # response['datetime'] = dt[:4] + '-' + dt[4:6] + '-' + dt[6:8] + ' ' + dt[8:10] + ':' + dt[10:12] + ':' + dt[
-            #                                                                                                          12:14]
-            # response['latitude'] = regex_search_result.group(4)
-            # response['longitude'] = regex_search_result.group(5)
-            # response['altitude'] = regex_search_result.group(6)
-            splitted_gps_command_response=gps_command_response.split(",")
-            response= GpsData(latitude=splitted_gps_command_response[3],longitude=splitted_gps_command_response[4],
-                              datetime=splitted_gps_command_response[2],altitude=splitted_gps_command_response[5])
-        else:
-            print("Invalid GPS data, trying again in 10 seconds")
-            utime.sleep(10)
-            # TODO: Change it to do not use recurrence
-            return self.get_gps_data()
-        print(f"Acquired coordinates: {gps_command_response}")
-        return response
-
+def get_gps_data(self) -> GpsData:
     """
-	HTTP Post
-	"""
-
-    # TODO: Method refactor
-    def httpPost(self, url):
-        self.write_command_and_return_response(b'AT+HTTPINIT\r')
-
-        utime.sleep(1)
-
-        self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + '"\r')
-
-        utime.sleep(1)
-
-        response = self.write_command_and_return_response(b'AT+HTTPACTION=0\r')
-
-        utime.sleep(1)
-
-        self.write_command_and_return_response(b'AT+HTTPTERM\r')
-
-        return str(response)
-
+    Retrieves the current location using the GNSS module.
+    Set GPS module power on if it's not turned on.
+    :return: A string representing the geographic coordinates (latitude and longitude) of the current location.
     """
-	GPRS Init
-	"""
 
-    # TODO: Method refactor
-    def httpInit(self):
-        self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
+    def gps_coordinates_acquired(command_response: str) -> bool:
+        """
+        Example of correct AT+CGNSING output:
+            "+CGNSINF: 1,1,20231122111000.000,50.887232,19.231535,120.429,0.00,0.0,1,,1.0,1.4,0.9,,14,7,5,,31,,"
+        Example of not correct AT+CGNSING output:
+            +CGNSINF: 0,,,,,,,,,,,,,,,,,,,,
+        GPS coordinates are marked as acquired if AT+CGNSING command returned output without series of blank fields.
 
-        utime.sleep(1)
+        :param command_response:
+        :return: state if there are in acquired command response
+        """
+        return ',,,,' not in command_response and command_response is not None
 
-        # Vodaphone settings
-        self.write_command_and_return_response(b'AT+SAPBR=3,1,"CONTYPE","GPRS"\r')
+    def send_modem_gps_info_command() -> str:
+        return self.write_command_and_return_response(b'AT+CGNSINF\r\n', 10)
 
-        utime.sleep(1)
+    if not self.gps_power_state: self.set_gps_on()
 
-        self.write_command_and_return_response(b'AT+SAPBR=3,1,"APN","pp.vodafone.co.uk"\r')
+    gps_command_response = send_modem_gps_info_command()
 
-        utime.sleep(1)
+    if gps_coordinates_acquired(gps_command_response):
+        splitted_gps_command_response = gps_command_response.split(",")
+        response = GpsData(latitude=splitted_gps_command_response[3], longitude=splitted_gps_command_response[4],
+                           datetime=splitted_gps_command_response[2], altitude=splitted_gps_command_response[5])
+    else:
+        print("Invalid GPS data, trying again in 10 seconds")
+        utime.sleep(10)
+        # TODO: Change it to do not use recurrence
+        return self.get_gps_data()
+    print(f"Acquired coordinates: {gps_command_response}")
+    return response
 
-        self.write_command_and_return_response(b'AT+SAPBR=3,1,"USER","wap"\r')
 
-        utime.sleep(1)
+"""
+HTTP Post
+"""
 
-        self.write_command_and_return_response(b'AT+SAPBR=3,1,"PWD","wap"\r')
 
-        utime.sleep(1)
+# TODO: Method refactor
+def httpPost(self, url):
+    self.write_command_and_return_response(b'AT+HTTPINIT\r')
 
-        self.write_command_and_return_response(b'AT+SAPBR=2,1\r')
+    utime.sleep(1)
 
-        utime.sleep(1)
+    self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + '"\r')
 
-        self.write_command_and_return_response(b'AT+SAPBR=1,1\r')
+    utime.sleep(1)
+
+    response = self.write_command_and_return_response(b'AT+HTTPACTION=0\r')
+
+    utime.sleep(1)
+
+    self.write_command_and_return_response(b'AT+HTTPTERM\r')
+
+    return str(response)
+
+
+"""
+GPRS Init
+"""
+
+
+# TODO: Method refactor
+def httpInit(self):
+    self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
+
+    utime.sleep(1)
+
+    # Vodaphone settings
+    self.write_command_and_return_response(b'AT+SAPBR=3,1,"CONTYPE","GPRS"\r')
+
+    utime.sleep(1)
+
+    self.write_command_and_return_response(b'AT+SAPBR=3,1,"APN","pp.vodafone.co.uk"\r')
+
+    utime.sleep(1)
+
+    self.write_command_and_return_response(b'AT+SAPBR=3,1,"USER","wap"\r')
+
+    utime.sleep(1)
+
+    self.write_command_and_return_response(b'AT+SAPBR=3,1,"PWD","wap"\r')
+
+    utime.sleep(1)
+
+    self.write_command_and_return_response(b'AT+SAPBR=2,1\r')
+
+    utime.sleep(1)
+
+    self.write_command_and_return_response(b'AT+SAPBR=1,1\r')
