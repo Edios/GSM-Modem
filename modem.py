@@ -5,6 +5,10 @@ import re
 import machine
 
 
+def to_bytes(given):
+    return bytes(given, "utf-8")
+
+
 class GpsData:
     """
     Data class for storing obtained datetime and geographic location data.
@@ -166,7 +170,8 @@ class PicoSimcom868:
         self.write_command_and_return_response(b'AT+CSCS="GSM"\r', 1)
 
         # Start sending
-        self.write_command_and_return_response(b'AT+CMGS="' + number + '"\r', 1)
+        set_number_string = 'AT+CMGS="' + number + '"\r'
+        self.write_command_and_return_response(bytes(set_number_string, 'utf-8'), 1)
 
         # Send message
         response = self.write_command_and_return_response(message + '\r\x1a', 1)
@@ -249,13 +254,7 @@ class PicoSimcom868:
     # TODO: Method refactor
     def httpPost(self, url):
         self.write_command_and_return_response(b'AT+HTTPINIT\r')
-
-        utime.sleep(1)
-
         self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + '"\r')
-
-        utime.sleep(1)
-
         response = self.write_command_and_return_response(b'AT+HTTPACTION=0\r')
 
         utime.sleep(1)
@@ -264,35 +263,29 @@ class PicoSimcom868:
 
         return str(response)
 
-    """
-    GPRS Init
-    """
+    def initialize_http(self, apn: str, apn_address: str = None, apn_user: str = None,
+                        apn_password: str = None):
+        """
+        Initializes GPRS for HTTP communication.
 
-    # TODO: Method refactor
-    def httpInit(self):
+        :param apn_address: Access point address (if not dns)
+        :param apn_user: Access point username (if required)
+        :param apn_password: Access point username (if required)
+        :param apn: Access Point Name for GPRS (default is "internet").
+
+        Note:
+            This method sets up GPRS configuration for HTTP communication using AT commands.
+            It configures the GPRS connection with the specified Access Point Name (APN),
+        """
+
         self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
-
-        utime.sleep(1)
-
-        # Vodaphone settings
         self.write_command_and_return_response(b'AT+SAPBR=3,1,"CONTYPE","GPRS"\r')
-
-        utime.sleep(1)
-
-        self.write_command_and_return_response(b'AT+SAPBR=3,1,"APN","pp.vodafone.co.uk"\r')
-
-        utime.sleep(1)
-
-        self.write_command_and_return_response(b'AT+SAPBR=3,1,"USER","wap"\r')
-
-        utime.sleep(1)
-
-        self.write_command_and_return_response(b'AT+SAPBR=3,1,"PWD","wap"\r')
-
-        utime.sleep(1)
-
+        self.write_command_and_return_response(b'AT+SAPBR=3,1,\"APN\",\"' + to_bytes(apn) + b'\"')
+        if apn_address:
+            self.write_command_and_return_response(b'AT+SAPBR=3,1,"APN",'+to_bytes(apn_address)+b'\r')
+        if apn_user:
+            self.write_command_and_return_response(b'AT+SAPBR=3,1,"USER",' + to_bytes(apn_user) + b'\r')
+        if apn_password:
+            self.write_command_and_return_response(b'AT+SAPBR=3,1,"PWD",' + to_bytes(apn_password) + b'\r')
         self.write_command_and_return_response(b'AT+SAPBR=2,1\r')
-
-        utime.sleep(1)
-
         self.write_command_and_return_response(b'AT+SAPBR=1,1\r')
