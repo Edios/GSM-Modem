@@ -35,9 +35,14 @@ class GpsData:
         return self.latitude, self.longitude
 
 
+class GpsCoordinatesNotAcquired(Exception):
+    pass
+
+
 class PicoSimcom868:
     """
     A class representing the Simcom SIM868 module, connected to a Raspberry Pi Pico.
+    This class provides a Python interface to interact with the Simcom SIM868 module for GSM and GPS communication.
     Implementation is based on usage of Micropython.
 
     Code based on implementation of @EvilPeanut: https://github.com/EvilPeanut/GSM-Modem
@@ -90,7 +95,7 @@ class PicoSimcom868:
         return decoded_data.replace("\r", "").replace("\n", "")
 
     def write_command_and_return_response(self, command, time_to_wait=1, print_response=True):
-        if not self.module_power_state: self.change_module_power_state()
+
         self.last_command = command
         self.uart.flush()
         self.uart.write(command)
@@ -100,9 +105,6 @@ class PicoSimcom868:
         return response
 
     def read_uart_response(self):
-        if not self.module_power_state: self.change_module_power_state()
-        # Add sleep to make sure that respond was transmitted
-        # utime.sleep(0.1)
         if self.uart.txdone():
             serial_read_raw_data = self.uart.read()
         else:
@@ -115,7 +117,6 @@ class PicoSimcom868:
         Return echo
         """
         response = self.write_command_and_return_response(b'AT\r', 1)
-
         return response
 
     def get_gsm_signal_quality(self):
@@ -194,103 +195,104 @@ class PicoSimcom868:
         self.gps_power_state = False
         return response
 
-    # TODO: Separate method for CGNSINF
-
-
-def get_gps_data(self) -> GpsData:
-    """
-    Retrieves the current location using the GNSS module.
-    Set GPS module power on if it's not turned on.
-    :return: A string representing the geographic coordinates (latitude and longitude) of the current location.
-    """
-
-    def gps_coordinates_acquired(command_response: str) -> bool:
+    def get_gps_data(self, attempts_number=5, attempt_wait_time=5) -> GpsData:
         """
-        Example of correct AT+CGNSING output:
-            "+CGNSINF: 1,1,20231122111000.000,50.887232,19.231535,120.429,0.00,0.0,1,,1.0,1.4,0.9,,14,7,5,,31,,"
-        Example of not correct AT+CGNSING output:
-            +CGNSINF: 0,,,,,,,,,,,,,,,,,,,,
-        GPS coordinates are marked as acquired if AT+CGNSING command returned output without series of blank fields.
+        Retrieves the current location using the GNSS module.
+        Set GPS module power on if it's not turned on.
 
-        :param command_response:
-        :return: state if there are in acquired command response
+        :param attempts_number: Set a number of attempts which for accruing GPS coordinates
+        :param attempt_wait_time: Set a wait time between coordinates attempt  will occur
+        :return: A string representing the geographic coordinates (latitude and longitude) of the current location.
+
+        Method will throw GpsCoordinatesNotAcquired exception if was unable to gather GPS Data
+
         """
-        return ',,,,' not in command_response and command_response is not None
 
-    def send_modem_gps_info_command() -> str:
-        return self.write_command_and_return_response(b'AT+CGNSINF\r\n', 10)
+        def gps_coordinates_acquired(command_response: str) -> bool:
+            """
+            Example of correct AT+CGNSING output:
+                "+CGNSINF: 1,1,20231122111000.000,50.887232,19.231535,120.429,0.00,0.0,1,,1.0,1.4,0.9,,14,7,5,,31,,"
+            Example of not correct AT+CGNSING output:
+                +CGNSINF: 0,,,,,,,,,,,,,,,,,,,,
+            GPS coordinates are marked as acquired if AT+CGNSING command returned output without series of blank fields.
 
-    if not self.gps_power_state: self.set_gps_on()
+            :param command_response:
+            :return: state if there are in acquired command response
+            """
+            return ',,,,' not in command_response and command_response is not None
 
-    gps_command_response = send_modem_gps_info_command()
+        def send_modem_gps_info_command() -> str:
+            return self.write_command_and_return_response(b'AT+CGNSINF\r\n', 10)
 
-    if gps_coordinates_acquired(gps_command_response):
-        splitted_gps_command_response = gps_command_response.split(",")
-        response = GpsData(latitude=splitted_gps_command_response[3], longitude=splitted_gps_command_response[4],
-                           datetime=splitted_gps_command_response[2], altitude=splitted_gps_command_response[5])
-    else:
-        print("Invalid GPS data, trying again in 10 seconds")
-        utime.sleep(10)
-        # TODO: Change it to do not use recurrence
-        return self.get_gps_data()
-    print(f"Acquired coordinates: {gps_command_response}")
-    return response
+        for _ in range(attempts_number):
+            gps_command_response = send_modem_gps_info_command()
+            # TODO: change to for loop with timeout contidion
+            if gps_coordinates_acquired(gps_command_response):
+                split_gps_command_response = gps_command_response.split(",")
+                response = GpsData(latitude=split_gps_command_response[3], longitude=split_gps_command_response[4],
+                                   datetime=split_gps_command_response[2], altitude=split_gps_command_response[5])
+                print(f"Acquired coordinates: {gps_command_response}")
+                return response
+            else:
+                print("Invalid GPS data, trying again in 10 seconds")
+                utime.sleep(attempt_wait_time)
+                # TODO: Change it to do not use recurrence
+                return self.get_gps_data()
 
+        raise GpsCoordinatesNotAcquired("Reached maximum gather attempts number. "
+                                        "Unable to acquire GPS coordinates data.")
 
-"""
-HTTP Post
-"""
+    """
+    HTTP Post
+    """
 
+    # TODO: Method refactor
+    def httpPost(self, url):
+        self.write_command_and_return_response(b'AT+HTTPINIT\r')
 
-# TODO: Method refactor
-def httpPost(self, url):
-    self.write_command_and_return_response(b'AT+HTTPINIT\r')
+        utime.sleep(1)
 
-    utime.sleep(1)
+        self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + '"\r')
 
-    self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + '"\r')
+        utime.sleep(1)
 
-    utime.sleep(1)
+        response = self.write_command_and_return_response(b'AT+HTTPACTION=0\r')
 
-    response = self.write_command_and_return_response(b'AT+HTTPACTION=0\r')
+        utime.sleep(1)
 
-    utime.sleep(1)
+        self.write_command_and_return_response(b'AT+HTTPTERM\r')
 
-    self.write_command_and_return_response(b'AT+HTTPTERM\r')
+        return str(response)
 
-    return str(response)
+    """
+    GPRS Init
+    """
 
+    # TODO: Method refactor
+    def httpInit(self):
+        self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
 
-"""
-GPRS Init
-"""
+        utime.sleep(1)
 
+        # Vodaphone settings
+        self.write_command_and_return_response(b'AT+SAPBR=3,1,"CONTYPE","GPRS"\r')
 
-# TODO: Method refactor
-def httpInit(self):
-    self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
+        utime.sleep(1)
 
-    utime.sleep(1)
+        self.write_command_and_return_response(b'AT+SAPBR=3,1,"APN","pp.vodafone.co.uk"\r')
 
-    # Vodaphone settings
-    self.write_command_and_return_response(b'AT+SAPBR=3,1,"CONTYPE","GPRS"\r')
+        utime.sleep(1)
 
-    utime.sleep(1)
+        self.write_command_and_return_response(b'AT+SAPBR=3,1,"USER","wap"\r')
 
-    self.write_command_and_return_response(b'AT+SAPBR=3,1,"APN","pp.vodafone.co.uk"\r')
+        utime.sleep(1)
 
-    utime.sleep(1)
+        self.write_command_and_return_response(b'AT+SAPBR=3,1,"PWD","wap"\r')
 
-    self.write_command_and_return_response(b'AT+SAPBR=3,1,"USER","wap"\r')
+        utime.sleep(1)
 
-    utime.sleep(1)
+        self.write_command_and_return_response(b'AT+SAPBR=2,1\r')
 
-    self.write_command_and_return_response(b'AT+SAPBR=3,1,"PWD","wap"\r')
+        utime.sleep(1)
 
-    utime.sleep(1)
-
-    self.write_command_and_return_response(b'AT+SAPBR=2,1\r')
-
-    utime.sleep(1)
-
-    self.write_command_and_return_response(b'AT+SAPBR=1,1\r')
+        self.write_command_and_return_response(b'AT+SAPBR=1,1\r')
