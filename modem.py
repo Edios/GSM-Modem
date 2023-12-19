@@ -98,6 +98,7 @@ class PicoSimcom868:
             decoded_data = decoded_data.split('\n')[1]
         return decoded_data.replace("\r", "").replace("\n", "")
 
+    # TODO: Add to_byte conversion
     def write_command_and_return_response(self, command, time_to_wait=1, print_response=True):
 
         self.last_command = command
@@ -105,7 +106,7 @@ class PicoSimcom868:
         self.uart.write(command)
         utime.sleep(time_to_wait)
         response = self.read_uart_response()
-        if print_response: print(f"Response:\n{response}")
+        if print_response: print(f"Command:\n{command}\nResponse:\n{response}")
         return response
 
     def read_uart_response(self):
@@ -231,7 +232,6 @@ class PicoSimcom868:
 
         for _ in range(attempts_number):
             gps_command_response = send_modem_gps_info_command()
-            # TODO: change to for loop with timeout contidion
             if gps_coordinates_acquired(gps_command_response):
                 split_gps_command_response = gps_command_response.split(",")
                 response = GpsData(latitude=split_gps_command_response[3], longitude=split_gps_command_response[4],
@@ -241,27 +241,10 @@ class PicoSimcom868:
             else:
                 print("Invalid GPS data, trying again in 10 seconds")
                 utime.sleep(attempt_wait_time)
-                # TODO: Change it to do not use recurrence
-                return self.get_gps_data()
+                pass
 
         raise GpsCoordinatesNotAcquired("Reached maximum gather attempts number. "
                                         "Unable to acquire GPS coordinates data.")
-
-    """
-    HTTP Post
-    """
-
-    # TODO: Method refactor
-    def httpPost(self, url):
-        self.write_command_and_return_response(b'AT+HTTPINIT\r')
-        self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + '"\r')
-        response = self.write_command_and_return_response(b'AT+HTTPACTION=0\r')
-
-        utime.sleep(1)
-
-        self.write_command_and_return_response(b'AT+HTTPTERM\r')
-
-        return str(response)
 
     def initialize_http(self, apn: str, apn_address: str = None, apn_user: str = None,
                         apn_password: str = None):
@@ -278,14 +261,31 @@ class PicoSimcom868:
             It configures the GPRS connection with the specified Access Point Name (APN),
         """
 
-        self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
         self.write_command_and_return_response(b'AT+SAPBR=3,1,"CONTYPE","GPRS"\r')
-        self.write_command_and_return_response(b'AT+SAPBR=3,1,\"APN\",\"' + to_bytes(apn) + b'\"')
+        self.write_command_and_return_response(b'AT+SAPBR=3,1,\"APN\",\"' + to_bytes(apn) + b'"\r')
         if apn_address:
-            self.write_command_and_return_response(b'AT+SAPBR=3,1,"APN",'+to_bytes(apn_address)+b'\r')
+            self.write_command_and_return_response(b'AT+SAPBR=3,1,"APN",' + to_bytes(apn_address) + b'\r')
         if apn_user:
             self.write_command_and_return_response(b'AT+SAPBR=3,1,"USER",' + to_bytes(apn_user) + b'\r')
         if apn_password:
             self.write_command_and_return_response(b'AT+SAPBR=3,1,"PWD",' + to_bytes(apn_password) + b'\r')
         self.write_command_and_return_response(b'AT+SAPBR=2,1\r')
         self.write_command_and_return_response(b'AT+SAPBR=1,1\r')
+        self.write_command_and_return_response(b'AT+HTTPINIT\r')
+        self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
+
+    def httpPost(self, url):
+        """
+        HTTP Post
+        """
+
+        # TODO: Method refactor
+        self.write_command_and_return_response(b'AT+HTTPINIT\r')
+        self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + '"\r')
+        response = self.write_command_and_return_response(b'AT+HTTPACTION=0\r')
+
+        utime.sleep(1)
+
+        self.write_command_and_return_response(b'AT+HTTPTERM\r')
+
+        return str(response)
