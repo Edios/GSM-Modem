@@ -38,6 +38,12 @@ class GpsData:
         """
         return self.latitude, self.longitude
 
+    def compose_google_maps_link(self):
+        """
+        Return a link to google maps to query a place with latitude and longitude of a place. (devided by space)
+        :return: Google Maps Link
+        """
+        return f"https://www.google.com/maps/search/?api=1&query={self.latitude}%20{self.longitude}"
 
 class GpsCoordinatesNotAcquired(Exception):
     pass
@@ -272,20 +278,30 @@ class PicoSimcom868:
         self.write_command_and_return_response(b'AT+SAPBR=2,1\r')
         self.write_command_and_return_response(b'AT+SAPBR=1,1\r')
         self.write_command_and_return_response(b'AT+HTTPINIT\r')
+        # Enable SSL software feature
+        self.write_command_and_return_response(b'AT+HTTPSSL=1\r')
         self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
 
-    def httpPost(self, url):
+    def http_post(self, url:str,data:str):
         """
         HTTP Post
         """
 
         # TODO: Method refactor
-        self.write_command_and_return_response(b'AT+HTTPINIT\r')
-        self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + '"\r')
-        response = self.write_command_and_return_response(b'AT+HTTPACTION=0\r')
+        #self.write_command_and_return_response(b'AT+HTTPINIT\r')
+        self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + b'"\r')
+        # Get= 0 / Post= 1
+        self.write_command_and_return_response(b'AT+HTTPACTION=1\r',3)
+        self.write_command_and_return_response(to_bytes(f'AT+HTTPDATA={len(data.encode())+5},10000\r'))
+        #self.write_command_and_return_response(to_bytes(str(data)+"\r\n"))
+        self.write_command_and_return_response(to_bytes(str(data)+'\r\x1a'))
+        #"AT+HTTPPARA=\"CONTENT\",\"text/plain\"\r"
 
-        utime.sleep(1)
 
+        utime.sleep(10)
+        #
+        self.write_command_and_return_response(b'"AT+HTTPREAD\r\n"')
+        utime.sleep(10)
         self.write_command_and_return_response(b'AT+HTTPTERM\r')
 
-        return str(response)
+        #return str(response)
