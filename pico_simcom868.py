@@ -45,6 +45,7 @@ class GpsData:
         """
         return f"https://www.google.com/maps/search/?api=1&query={self.latitude}%20{self.longitude}"
 
+
 class GpsCoordinatesNotAcquired(Exception):
     pass
 
@@ -65,6 +66,7 @@ class PicoSimcom868:
         self.power_pin = machine.Pin(module_power_gpio_pin, mode=machine.Pin.OUT, pull=machine.Pin.PULL_DOWN)
         self.uart = machine.UART(self.port, self.uart_baudrate)
 
+        # TODO: Add check with get_echo() to make sure that power state is real (Symptom: NORMAL POWER DOWN\x00 or OK)
         self.module_power_state = False
         self.gps_power_state = False
         self.last_command = None
@@ -104,7 +106,9 @@ class PicoSimcom868:
             decoded_data = decoded_data.split('\n')[1]
         return decoded_data.replace("\r", "").replace("\n", "")
 
-    # TODO: Add to_byte conversion
+    # TODO: Add to_byte conversion and command with response check. Inspirations:
+    #  https://github.com/Ircama/raspberry-pi-sim800l-gsm-module/blob/master/sim800l/sim800l.py
+    #  https://github.com/inductivekickback/at/blob/master/at/at.py
     def write_command_and_return_response(self, command, time_to_wait=1, print_response=True):
 
         self.last_command = command
@@ -282,21 +286,21 @@ class PicoSimcom868:
         self.write_command_and_return_response(b'AT+HTTPSSL=1\r')
         self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
 
-    def http_post(self, url:str,data:str):
+    def http_post(self, url: str, data: str):
         """
         HTTP Post
         """
 
         # TODO: Method refactor
-        #self.write_command_and_return_response(b'AT+HTTPINIT\r')
+        # self.write_command_and_return_response(b'AT+HTTPINIT\r')
         self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + b'"\r')
         # Get= 0 / Post= 1
-        self.write_command_and_return_response(b'AT+HTTPACTION=1\r',3)
-        self.write_command_and_return_response(to_bytes(f'AT+HTTPDATA={len(data.encode())+5},10000\r'))
+        self.write_command_and_return_response(b'AT+HTTPACTION=1\r', 3)
+        #self.write_command_and_return_response(to_bytes(to_bytes(f'AT+HTTPDATA={len(data.encode()) + 5},10000\r')))
+        self.write_command_and_return_response(to_bytes(to_bytes(f'AT+HTTPDATA=15,10000\r')))
         #self.write_command_and_return_response(to_bytes(str(data)+"\r\n"))
-        self.write_command_and_return_response(to_bytes(str(data)+'\r\x1a'))
-        #"AT+HTTPPARA=\"CONTENT\",\"text/plain\"\r"
-
+        self.write_command_and_return_response(to_bytes(str(data) + '\r\x1a'))
+        # "AT+HTTPPARA=\"CONTENT\",\"text/plain\"\r"
 
         utime.sleep(10)
         #
@@ -304,4 +308,4 @@ class PicoSimcom868:
         utime.sleep(10)
         self.write_command_and_return_response(b'AT+HTTPTERM\r')
 
-        #return str(response)
+        # return str(response)
