@@ -65,7 +65,7 @@ def compose_gps_data_with_metadata(gps_data: GpsData, device_id: str = "Default 
       // var altitude = 0
     """
     pass
-    #return {"device_id": device_id, **gps_data}
+    # return {"device_id": device_id, **gps_data}
 
 
 # TODO: Can be overload of compose_single_json_packet
@@ -76,5 +76,26 @@ def compose_gps_data_with_metadata(gps_data: GpsData, device_id: str = "Default 
 #     return multiple_dictionary
 
 
+dummy_data = {
+    "resource": [
+        {
+            "device_id": "PICO",
+            "latitude": "15.202000",
+            "longitude": "75.31100",
+            "datetime": "2023-03-29 12:30:44",
+            "altitude": "75.32000"
+        },
+        {
+            "device_id": "POSTMAN2",
+            "latitude": "15.200000",
+            "longitude": "75.32000",
+            "datetime": "2023-03-29 12:30:44",
+            "altitude": "75.32000"
+        }
+    ]
+}
+
+
 def post_data():
-    sim868.http_post("https://webhook.site/831edb32-4630-4877-9d2e-b6a4d08a25fa", "data")
+    # sim868.http_post("https://webhook.site/831edb32-4630-4877-9d2e-b6a4d08a25fa", "data")
+    sim868.http_post("https://script.google.com/macros/s/AKfycbwaGclwFytcXE6fX34CoT_e5-Y2r5P0-3yGlWNa17Ah3N7yf30lbUQouLw7ryXaY2TL/exec", str(dummy_data))

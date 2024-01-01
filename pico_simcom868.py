@@ -110,7 +110,7 @@ class PicoSimcom868:
     # TODO: Add to_byte conversion and command with response check. Inspirations:
     #  https://github.com/Ircama/raspberry-pi-sim800l-gsm-module/blob/master/sim800l/sim800l.py
     #  https://github.com/inductivekickback/at/blob/master/at/at.py
-    def send_command(self, command: str, time_to_wait=1, print_response=True):
+    def send_command(self, command: str, time_to_wait=1, add_execute_command_string=True, print_response=True):
         """
         Send a command through the UART interface to the module and read the response.
 
@@ -120,9 +120,12 @@ class PicoSimcom868:
 
         :param command: The command to be sent as a byte sequence.
         :param time_to_wait: Time to wait to response read after sending command
+        :param add_execute_command_string: Determine if '\r' should be added at the end of the command to execute it
         :param print_response:  Whether to print the command and response to the console (default is True)
         :return: The response received from the module serial.
         """
+
+        if add_execute_command_string: command += '\r'
         self.last_command = command
         command = to_bytes(command)
         self.uart.flush()
@@ -131,8 +134,13 @@ class PicoSimcom868:
         response = self.read_uart_response()
         if print_response: print(f"Command:\n{command}\nResponse:\n{response}")
         return response
-    def send_command_and_check_response(self,command,expected_response,time_to_wait=1,print_response=True):
-        command_response = self.send_command(command=command)
+
+    def send_command_and_check_response(self, command, expected_response, add_execute_command_string=True,
+                                        time_to_wait=1):
+        command_response = self.send_command(command=command,
+                                             time_to_wait=time_to_wait,
+                                             add_execute_command_string=add_execute_command_string,
+                                             print_response=False)
         if expected_response in command_response:
             print(f"Correct response from command {command} with answer {command_response}")
             return True
@@ -140,6 +148,7 @@ class PicoSimcom868:
             print(f"Expected response string not found in command output!\n "
                   f"Command {command} with answer {command_response}")
             return False
+
     def read_uart_response(self):
         if self.uart.txdone():
             serial_read_raw_data = self.uart.read()
@@ -158,7 +167,7 @@ class PicoSimcom868:
     def ensure_module_power_state(self):
         """
         Send echo command to determine if module is really powered down.
-        Module power state is keept in self.module_power_state variable
+        Module power state is kept in self.module_power_state variable
         """
         # TODO: Add check with get_echo() to make sure that power state is real (Symptom: NORMAL POWER DOWN\x00 or OK)
         echo_command_output = self.get_echo()
