@@ -110,16 +110,36 @@ class PicoSimcom868:
     # TODO: Add to_byte conversion and command with response check. Inspirations:
     #  https://github.com/Ircama/raspberry-pi-sim800l-gsm-module/blob/master/sim800l/sim800l.py
     #  https://github.com/inductivekickback/at/blob/master/at/at.py
-    def write_command_and_return_response(self, command, time_to_wait=1, print_response=True):
+    def send_command(self, command: str, time_to_wait=1, print_response=True):
+        """
+        Send a command through the UART interface to the module and read the response.
 
+        This method flushes the serial buffer, then sends a command through the UART interface,
+        After that waits for the specified time, and reads the response.
+        The response is then optionally printed to the console.
+
+        :param command: The command to be sent as a byte sequence.
+        :param time_to_wait: Time to wait to response read after sending command
+        :param print_response:  Whether to print the command and response to the console (default is True)
+        :return: The response received from the module serial.
+        """
         self.last_command = command
+        command = to_bytes(command)
         self.uart.flush()
         self.uart.write(command)
         utime.sleep(time_to_wait)
         response = self.read_uart_response()
         if print_response: print(f"Command:\n{command}\nResponse:\n{response}")
         return response
-
+    def send_command_and_check_response(self,command,expected_response,time_to_wait=1,print_response=True):
+        command_response = self.send_command(command=command)
+        if expected_response in command_response:
+            print(f"Correct response from command {command} with answer {command_response}")
+            return True
+        else:
+            print(f"Expected response string not found in command output!\n "
+                  f"Command {command} with answer {command_response}")
+            return False
     def read_uart_response(self):
         if self.uart.txdone():
             serial_read_raw_data = self.uart.read()
@@ -132,7 +152,7 @@ class PicoSimcom868:
         """
         Return echo
         """
-        response = self.write_command_and_return_response(b'AT\r', 1)
+        response = self.send_command(b'AT\r', 1)
         return response
 
     def ensure_module_power_state(self):
@@ -154,7 +174,7 @@ class PicoSimcom868:
         99 not known or not detectable
         """
         # TODO: Add enum for signal quality
-        response = self.write_command_and_return_response(b'AT+CSQ\r', 1)
+        response = self.send_command(b'AT+CSQ\r', 1)
         response = re.search(r"\+CSQ: (\d*),\d*", response).group(1)
 
         return response
@@ -170,7 +190,7 @@ class PicoSimcom868:
                     print(response)
                     regex = re.search(r'\+CMTI: "(\w+)",(\d+)', response[0])
                     msg_count = regex.group(2)
-                    response = self.write_command_and_return_response(b'AT+CMGR=' + msg_count + '\r')
+                    response = self.send_command(b'AT+CMGR=' + msg_count + '\r')
                     print(response)
                 if len(response) == 3:
                     # print(response)
@@ -185,17 +205,17 @@ class PicoSimcom868:
         """
 
         # Set the format of messages to Text mode
-        self.write_command_and_return_response(b'AT+CMGF=1\r', 1)
+        self.send_command(b'AT+CMGF=1\r', 1)
 
         # Select the GSM 7 bit default alphabet
-        self.write_command_and_return_response(b'AT+CSCS="GSM"\r', 1)
+        self.send_command(b'AT+CSCS="GSM"\r', 1)
 
         # Start sending
         set_number_string = 'AT+CMGS="' + number + '"\r'
-        self.write_command_and_return_response(bytes(set_number_string, 'utf-8'), 1)
+        self.send_command(bytes(set_number_string, 'utf-8'), 1)
 
         # Send message
-        response = self.write_command_and_return_response(message + '\r\x1a', 1)
+        response = self.send_command(message + '\r\x1a', 1)
 
         return response
 
@@ -204,7 +224,7 @@ class PicoSimcom868:
         Turn module GPS on
         """
         print("Setting GPS on")
-        response = self.write_command_and_return_response(b'AT+CGNSPWR=1\r', 5)
+        response = self.send_command(b'AT+CGNSPWR=1\r', 5)
         if self.gps_power_state:
             print("GPS already set on")
         else:
@@ -215,7 +235,7 @@ class PicoSimcom868:
 
     def set_gps_off(self):
         print("Setting GPS off")
-        response = self.write_command_and_return_response(b'AT+CGNSPWR=0\r', 5)
+        response = self.send_command(b'AT+CGNSPWR=0\r', 5)
         if not self.gps_power_state:
             print("GPS already set off")
         self.gps_power_state = False
@@ -248,7 +268,7 @@ class PicoSimcom868:
             return ',,,,' not in command_response and command_response is not None
 
         def send_modem_gps_info_command() -> str:
-            return self.write_command_and_return_response(b'AT+CGNSINF\r\n', 10)
+            return self.send_command(b'AT+CGNSINF\r\n', 10)
 
         for _ in range(attempts_number):
             gps_command_response = send_modem_gps_info_command()
@@ -281,20 +301,20 @@ class PicoSimcom868:
             It configures the GPRS connection with the specified Access Point Name (APN),
         """
 
-        self.write_command_and_return_response(b'AT+SAPBR=3,1,"CONTYPE","GPRS"\r')
-        self.write_command_and_return_response(b'AT+SAPBR=3,1,\"APN\",\"' + to_bytes(apn) + b'"\r')
+        self.send_command(b'AT+SAPBR=3,1,"CONTYPE","GPRS"\r')
+        self.send_command(b'AT+SAPBR=3,1,\"APN\",\"' + to_bytes(apn) + b'"\r')
         if apn_address:
-            self.write_command_and_return_response(b'AT+SAPBR=3,1,"APN",' + to_bytes(apn_address) + b'\r')
+            self.send_command(b'AT+SAPBR=3,1,"APN",' + to_bytes(apn_address) + b'\r')
         if apn_user:
-            self.write_command_and_return_response(b'AT+SAPBR=3,1,"USER",' + to_bytes(apn_user) + b'\r')
+            self.send_command(b'AT+SAPBR=3,1,"USER",' + to_bytes(apn_user) + b'\r')
         if apn_password:
-            self.write_command_and_return_response(b'AT+SAPBR=3,1,"PWD",' + to_bytes(apn_password) + b'\r')
-        self.write_command_and_return_response(b'AT+SAPBR=2,1\r')
-        self.write_command_and_return_response(b'AT+SAPBR=1,1\r')
-        self.write_command_and_return_response(b'AT+HTTPINIT\r')
+            self.send_command(b'AT+SAPBR=3,1,"PWD",' + to_bytes(apn_password) + b'\r')
+        self.send_command(b'AT+SAPBR=2,1\r')
+        self.send_command(b'AT+SAPBR=1,1\r')
+        self.send_command(b'AT+HTTPINIT\r')
         # Enable SSL software feature
-        self.write_command_and_return_response(b'AT+HTTPSSL=1\r')
-        self.write_command_and_return_response(b'AT+HTTPPARA="CID",1\r')
+        self.send_command(b'AT+HTTPSSL=1\r')
+        self.send_command(b'AT+HTTPPARA="CID",1\r')
 
     def http_post(self, url: str, data: str):
         """
@@ -303,24 +323,24 @@ class PicoSimcom868:
 
         # TODO: Method refactor
         # self.write_command_and_return_response(b'AT+HTTPINIT\r')
-        self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + b'"\r')
+        self.send_command(b'AT+HTTPPARA="URL","' + url + b'"\r')
         # Get= 0 / Post= 1
-        self.write_command_and_return_response(b'AT+HTTPACTION=1\r', 3)
+        self.send_command(b'AT+HTTPACTION=1\r', 3)
         # self.write_command_and_return_response(to_bytes(to_bytes(f'AT+HTTPDATA={len(data.encode()) + 5},10000\r')))
-        self.write_command_and_return_response(to_bytes(to_bytes(f'AT+HTTPDATA=15,10000\r')))
+        self.send_command(to_bytes(to_bytes(f'AT+HTTPDATA=15,10000\r')))
         # self.write_command_and_return_response(to_bytes(str(data)+"\r"))
         # self.write_command_and_return_response(to_bytes(str(data)+"\r"))
         # self.write_command_and_return_response(to_bytes(str(data)))
         # self.write_command_and_return_response(to_bytes(str(data) + '\r\x1a'))
-        self.write_command_and_return_response(to_bytes(str(data) + '>'))
-        self.write_command_and_return_response(to_bytes('\r\x1a'))
+        self.send_command(to_bytes(str(data) + '>'))
+        self.send_command(to_bytes('\r\x1a'))
         # "AT+HTTPPARA=\"CONTENT\",\"text/plain\"\r"
 
         utime.sleep(11)
         #
-        self.write_command_and_return_response(b'"AT+HTTPREAD\r\n"')
-        self.write_command_and_return_response(b'AT+HTTPACTION=1\r\n')
+        self.send_command(b'"AT+HTTPREAD\r\n"')
+        self.send_command(b'AT+HTTPACTION=1\r\n')
         utime.sleep(10)
-        self.write_command_and_return_response(b'AT+HTTPTERM\r')
+        self.send_command(b'AT+HTTPTERM\r')
 
         # return str(response)
