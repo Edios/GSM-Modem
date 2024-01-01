@@ -66,7 +66,6 @@ class PicoSimcom868:
         self.power_pin = machine.Pin(module_power_gpio_pin, mode=machine.Pin.OUT, pull=machine.Pin.PULL_DOWN)
         self.uart = machine.UART(self.port, self.uart_baudrate)
 
-
         self.module_power_state = False
         self.ensure_module_power_state()
 
@@ -142,7 +141,7 @@ class PicoSimcom868:
         Module power state is keept in self.module_power_state variable
         """
         # TODO: Add check with get_echo() to make sure that power state is real (Symptom: NORMAL POWER DOWN\x00 or OK)
-        echo_command_output=self.get_echo()
+        echo_command_output = self.get_echo()
         return 'OK' in echo_command_output
 
     def get_gsm_signal_quality(self):
@@ -307,12 +306,12 @@ class PicoSimcom868:
         self.write_command_and_return_response(b'AT+HTTPPARA="URL","' + url + b'"\r')
         # Get= 0 / Post= 1
         self.write_command_and_return_response(b'AT+HTTPACTION=1\r', 3)
-        #self.write_command_and_return_response(to_bytes(to_bytes(f'AT+HTTPDATA={len(data.encode()) + 5},10000\r')))
+        # self.write_command_and_return_response(to_bytes(to_bytes(f'AT+HTTPDATA={len(data.encode()) + 5},10000\r')))
         self.write_command_and_return_response(to_bytes(to_bytes(f'AT+HTTPDATA=15,10000\r')))
-        #self.write_command_and_return_response(to_bytes(str(data)+"\r"))
-        #self.write_command_and_return_response(to_bytes(str(data)+"\r"))
-        #self.write_command_and_return_response(to_bytes(str(data)))
-        #self.write_command_and_return_response(to_bytes(str(data) + '\r\x1a'))
+        # self.write_command_and_return_response(to_bytes(str(data)+"\r"))
+        # self.write_command_and_return_response(to_bytes(str(data)+"\r"))
+        # self.write_command_and_return_response(to_bytes(str(data)))
+        # self.write_command_and_return_response(to_bytes(str(data) + '\r\x1a'))
         self.write_command_and_return_response(to_bytes(str(data) + '>'))
         self.write_command_and_return_response(to_bytes('\r\x1a'))
         # "AT+HTTPPARA=\"CONTENT\",\"text/plain\"\r"
@@ -325,5 +324,3 @@ class PicoSimcom868:
         self.write_command_and_return_response(b'AT+HTTPTERM\r')
 
         # return str(response)
-
-
