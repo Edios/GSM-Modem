@@ -1,5 +1,3 @@
-from collections import namedtuple
-
 import utime
 import re
 import machine
@@ -67,7 +65,7 @@ class PicoSimcom868:
         self.uart = machine.UART(self.port, self.uart_baudrate)
 
         self.module_power_state = False
-        self.ensure_module_power_state()
+        # self.ensure_module_power_state()
 
         self.gps_power_state = False
         self.last_command = None
@@ -107,10 +105,18 @@ class PicoSimcom868:
             decoded_data = decoded_data.split('\n')[1]
         return decoded_data.replace("\r", "").replace("\n", "")
 
+    def read_uart_response(self):
+        if self.uart.txdone():
+            serial_read_raw_data = self.uart.read()
+        else:
+            raise Exception("UART tx not done, could not read anything from serial.")
+        if serial_read_raw_data:
+            return self.parse_serial_raw_data(serial_read_raw_data)
+
     # TODO: Add to_byte conversion and command with response check. Inspirations:
     #  https://github.com/Ircama/raspberry-pi-sim800l-gsm-module/blob/master/sim800l/sim800l.py
     #  https://github.com/inductivekickback/at/blob/master/at/at.py
-    def send_command(self, command: str, time_to_wait=1, add_execute_command_string=True, print_response=True):
+    def send_command(self, command, time_to_wait=1, add_execute_command_string=True, print_response=True):
         """
         Send a command through the UART interface to the module and read the response.
 
@@ -120,7 +126,7 @@ class PicoSimcom868:
 
         :param command: The command to be sent as a byte sequence.
         :param time_to_wait: Time to wait to response read after sending command
-        :param add_execute_command_string: Determine if '\r' should be added at the end of the command to execute it
+        :param add_execute_command_string: Determine if \r should be added at the end of the command to execute it
         :param print_response:  Whether to print the command and response to the console (default is True)
         :return: The response received from the module serial.
         """
@@ -135,33 +141,20 @@ class PicoSimcom868:
         if print_response: print(f"Command:\n{command}\nResponse:\n{response}")
         return response
 
-    def send_command_and_check_response(self, command, expected_response, add_execute_command_string=True,
-                                        time_to_wait=1):
-        command_response = self.send_command(command=command,
-                                             time_to_wait=time_to_wait,
-                                             add_execute_command_string=add_execute_command_string,
-                                             print_response=False)
+    def send_command_and_check_response(self, command:str, expected_response:str, add_execute_command_string:bool=True,time_to_wait:int=1):
+        command_response = self.send_command(command=command, time_to_wait=time_to_wait,add_execute_command_string=add_execute_command_string,print_response=False)
         if expected_response in command_response:
             print(f"Correct response from command {command} with answer {command_response}")
             return True
         else:
-            print(f"Expected response string not found in command output!\n "
-                  f"Command {command} with answer {command_response}")
+            print(f"Expected response string not found in command output!\n Command {command} with answer {command_response}")
             return False
-
-    def read_uart_response(self):
-        if self.uart.txdone():
-            serial_read_raw_data = self.uart.read()
-        else:
-            raise Exception("UART tx not done, could not read anything from serial.")
-        if serial_read_raw_data:
-            return self.parse_serial_raw_data(serial_read_raw_data)
 
     def get_echo(self):
         """
         Return echo
         """
-        response = self.send_command(b'AT\r', 1)
+        response = self.send_command('AT')
         return response
 
     def ensure_module_power_state(self):

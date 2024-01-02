@@ -1,5 +1,4 @@
 import utime
-
 from pico_simcom868 import PicoSimcom868, GpsCoordinatesNotAcquired, GpsData
 
 sim868 = PicoSimcom868()
@@ -55,7 +54,7 @@ def compose_gps_data_with_metadata(gps_data: GpsData, device_id: str = "Default 
     """
     """
       // var server_time = 0
-      
+
       // one_packet data:
       // var device_id = 0
       // //GpsData fields
