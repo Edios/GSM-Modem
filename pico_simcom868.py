@@ -48,6 +48,10 @@ class GpsCoordinatesNotAcquired(Exception):
     pass
 
 
+class IncorrectCommandOutput(Exception):
+    pass
+
+
 class PicoSimcom868:
     """
     A class representing the Simcom SIM868 module, connected to a Raspberry Pi Pico.
@@ -141,30 +145,40 @@ class PicoSimcom868:
         if print_response: print(f"Command:\n{command}\nResponse:\n{response}")
         return response
 
-    def send_command_and_check_response(self, command:str, expected_response:str, add_execute_command_string:bool=True,time_to_wait:int=1):
-        command_response = self.send_command(command=command, time_to_wait=time_to_wait,add_execute_command_string=add_execute_command_string,print_response=False)
+    def send_command_and_check_response(self, command: str, expected_response: str,
+                                        add_execute_command_string: bool = True, time_to_wait: int = 1,
+                                        raise_exception=False):
+        command_response = self.send_command(command=command, time_to_wait=time_to_wait,
+                                             add_execute_command_string=add_execute_command_string,
+                                             print_response=False)
         if expected_response in command_response:
             print(f"Correct response from command {command} with answer {command_response}")
             return True
         else:
-            print(f"Expected response string not found in command output!\n Command {command} with answer {command_response}")
-            return False
+            fail_message = f"Expected response string not found in command output!\n Command {command} with answer {command_response}"
+            if raise_exception:
+                raise IncorrectCommandOutput(fail_message)
+            else:
+                print(fail_message)
+                return True
 
     def get_echo(self):
         """
-        Return echo
+        Send echo command to the module.
+
+        :return: State if sending command was successful
         """
-        response = self.send_command('AT')
-        return response
+        return self.send_command_and_check_response('AT', 'OK')
 
     def ensure_module_power_state(self):
         """
         Send echo command to determine if module is really powered down.
-        Module power state is kept in self.module_power_state variable
+        Module power state is kept in self.module_power_state variable.
+        Turn off module power if detected that it is powered on.
         """
         # TODO: Add check with get_echo() to make sure that power state is real (Symptom: NORMAL POWER DOWN\x00 or OK)
-        echo_command_output = self.get_echo()
-        return 'OK' in echo_command_output
+        if self.get_echo():
+            self.change_module_power_state()
 
     def get_gsm_signal_quality(self):
         """
@@ -176,7 +190,7 @@ class PicoSimcom868:
         99 not known or not detectable
         """
         # TODO: Add enum for signal quality
-        response = self.send_command(b'AT+CSQ\r', 1)
+        response = self.send_command('AT+CSQ')
         response = re.search(r"\+CSQ: (\d*),\d*", response).group(1)
 
         return response
@@ -192,7 +206,7 @@ class PicoSimcom868:
                     print(response)
                     regex = re.search(r'\+CMTI: "(\w+)",(\d+)', response[0])
                     msg_count = regex.group(2)
-                    response = self.send_command(b'AT+CMGR=' + msg_count + '\r')
+                    response = self.send_command(f'AT+CMGR={msg_count}')
                     print(response)
                 if len(response) == 3:
                     # print(response)
@@ -207,17 +221,16 @@ class PicoSimcom868:
         """
 
         # Set the format of messages to Text mode
-        self.send_command(b'AT+CMGF=1\r', 1)
+        self.send_command('AT+CMGF=1')
 
         # Select the GSM 7 bit default alphabet
-        self.send_command(b'AT+CSCS="GSM"\r', 1)
+        self.send_command('AT+CSCS="GSM"')
 
         # Start sending
-        set_number_string = 'AT+CMGS="' + number + '"\r'
-        self.send_command(bytes(set_number_string, 'utf-8'), 1)
+        self.send_command(f'AT+CMGS="{number}"')
 
         # Send message
-        response = self.send_command(message + '\r\x1a', 1)
+        response = self.send_command(message + '\r\x1a',add_execute_command_string=False)
 
         return response
 
@@ -226,7 +239,7 @@ class PicoSimcom868:
         Turn module GPS on
         """
         print("Setting GPS on")
-        response = self.send_command(b'AT+CGNSPWR=1\r', 5)
+        response = self.send_command('AT+CGNSPWR=1', 5)
         if self.gps_power_state:
             print("GPS already set on")
         else:
@@ -237,7 +250,7 @@ class PicoSimcom868:
 
     def set_gps_off(self):
         print("Setting GPS off")
-        response = self.send_command(b'AT+CGNSPWR=0\r', 5)
+        response = self.send_command('AT+CGNSPWR=0', 5)
         if not self.gps_power_state:
             print("GPS already set off")
         self.gps_power_state = False
@@ -269,8 +282,8 @@ class PicoSimcom868:
             """
             return ',,,,' not in command_response and command_response is not None
 
-        def send_modem_gps_info_command() -> str:
-            return self.send_command(b'AT+CGNSINF\r\n', 10)
+        def send_modem_gps_info_command():
+            return self.send_command('AT+CGNSINF', 10)
 
         for _ in range(attempts_number):
             gps_command_response = send_modem_gps_info_command()
@@ -303,20 +316,20 @@ class PicoSimcom868:
             It configures the GPRS connection with the specified Access Point Name (APN),
         """
 
-        self.send_command(b'AT+SAPBR=3,1,"CONTYPE","GPRS"\r')
-        self.send_command(b'AT+SAPBR=3,1,\"APN\",\"' + to_bytes(apn) + b'"\r')
+        self.send_command('AT+SAPBR=3,1,"CONTYPE","GPRS"')
+        self.send_command(f'AT+SAPBR=3,1,"APN","{apn}"')
         if apn_address:
-            self.send_command(b'AT+SAPBR=3,1,"APN",' + to_bytes(apn_address) + b'\r')
+            self.send_command(f'AT+SAPBR=3,1,"APN","{apn_address}"')
         if apn_user:
-            self.send_command(b'AT+SAPBR=3,1,"USER",' + to_bytes(apn_user) + b'\r')
+            self.send_command(f'AT+SAPBR=3,1,"USER","{apn_user}"')
         if apn_password:
-            self.send_command(b'AT+SAPBR=3,1,"PWD",' + to_bytes(apn_password) + b'\r')
-        self.send_command(b'AT+SAPBR=2,1\r')
-        self.send_command(b'AT+SAPBR=1,1\r')
-        self.send_command(b'AT+HTTPINIT\r')
+            self.send_command(f'AT+SAPBR=3,1,"PWD","{apn_password}"')
+        self.send_command('AT+SAPBR=2,1')
+        self.send_command('AT+SAPBR=1,1')
+        self.send_command('AT+HTTPINIT')
         # Enable SSL software feature
-        self.send_command(b'AT+HTTPSSL=1\r')
-        self.send_command(b'AT+HTTPPARA="CID",1\r')
+        self.send_command('AT+HTTPSSL=1')
+        self.send_command('AT+HTTPPARA="CID",1')
 
     def http_post(self, url: str, data: str):
         """
@@ -324,25 +337,24 @@ class PicoSimcom868:
         """
 
         # TODO: Method refactor
-        # self.write_command_and_return_response(b'AT+HTTPINIT\r')
-        self.send_command(b'AT+HTTPPARA="URL","' + url + b'"\r')
+        self.send_command(f'AT+HTTPPARA="URL","{url}"')
         # Get= 0 / Post= 1
-        self.send_command(b'AT+HTTPACTION=1\r', 3)
+        self.send_command('AT+HTTPACTION=1', 3)
         # self.write_command_and_return_response(to_bytes(to_bytes(f'AT+HTTPDATA={len(data.encode()) + 5},10000\r')))
-        self.send_command(to_bytes(to_bytes(f'AT+HTTPDATA=15,10000\r')))
+        self.send_command(f'AT+HTTPDATA=15,10000')
         # self.write_command_and_return_response(to_bytes(str(data)+"\r"))
         # self.write_command_and_return_response(to_bytes(str(data)+"\r"))
         # self.write_command_and_return_response(to_bytes(str(data)))
         # self.write_command_and_return_response(to_bytes(str(data) + '\r\x1a'))
-        self.send_command(to_bytes(str(data) + '>'))
-        self.send_command(to_bytes('\r\x1a'))
+        self.send_command(str(data) + '>', add_execute_command_string=False)
+        self.send_command('\r\x1a', add_execute_command_string=False)
         # "AT+HTTPPARA=\"CONTENT\",\"text/plain\"\r"
 
         utime.sleep(11)
         #
-        self.send_command(b'"AT+HTTPREAD\r\n"')
-        self.send_command(b'AT+HTTPACTION=1\r\n')
+        self.send_command('AT+HTTPREAD')
+        self.send_command('AT+HTTPACTION=1')
         utime.sleep(10)
-        self.send_command(b'AT+HTTPTERM\r')
+        self.send_command('AT+HTTPTERM')
 
         # return str(response)
