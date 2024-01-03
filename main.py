@@ -5,6 +5,7 @@ sim868 = PicoSimcom868()
 
 
 def initialize_module():
+    sim868.ensure_module_power_state()
     if not sim868.module_power_state:
         sim868.change_module_power_state()
 

@@ -65,11 +65,11 @@ class PicoSimcom868:
     def __init__(self, port=0, uart_baudrate=115200, module_power_gpio_pin=14):
         self.port = port
         self.uart_baudrate = uart_baudrate
-        self.power_pin = machine.Pin(module_power_gpio_pin, mode=machine.Pin.OUT, pull=machine.Pin.PULL_DOWN)
+        self.power_pin = machine.Pin(module_power_gpio_pin, mode=machine.Pin.OUT)
         self.uart = machine.UART(self.port, self.uart_baudrate)
 
         self.module_power_state = False
-        # self.ensure_module_power_state()
+        self.ensure_module_power_state()
 
         self.gps_power_state = False
         self.last_command = None
@@ -176,9 +176,8 @@ class PicoSimcom868:
         Module power state is kept in self.module_power_state variable.
         Turn off module power if detected that it is powered on.
         """
-        # TODO: Add check with get_echo() to make sure that power state is real (Symptom: NORMAL POWER DOWN\x00 or OK)
         if self.get_echo():
-            self.change_module_power_state()
+            self.change_module_power_state(force_state=False)
 
     def get_gsm_signal_quality(self):
         """
@@ -230,7 +229,7 @@ class PicoSimcom868:
         self.send_command(f'AT+CMGS="{number}"')
 
         # Send message
-        response = self.send_command(message + '\r\x1a',add_execute_command_string=False)
+        response = self.send_command(message + '\r\x1a', add_execute_command_string=False)
 
         return response
 
