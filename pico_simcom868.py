@@ -75,6 +75,7 @@ class PicoSimcom868:
         self.last_command = None
         self.last_number = None
 
+    # TODO: It trigger DTR pin to wake up / make device sleep - change naming convention to reflect this
     def change_module_power_state(self, force_state=None):
         """
         Change power level of the modem module.
@@ -138,7 +139,6 @@ class PicoSimcom868:
         if add_execute_command_string: command += '\r'
         self.last_command = command
         command = to_bytes(command)
-        self.uart.flush()
         self.uart.write(command)
         utime.sleep(time_to_wait)
         response = self.read_uart_response()
