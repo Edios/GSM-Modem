@@ -51,6 +51,8 @@ class GpsCoordinatesNotAcquired(Exception):
 class IncorrectCommandOutput(Exception):
     pass
 
+class EmptySerialData(Exception):
+    pass
 
 class PicoSimcom868:
     """
@@ -62,10 +64,10 @@ class PicoSimcom868:
 
     """
 
-    def __init__(self, port=0, uart_baudrate=115200, module_power_gpio_pin=14):
+    def __init__(self, port=0, uart_baudrate=115200, module_dtr_gpio_pin=14):
         self.port = port
         self.uart_baudrate = uart_baudrate
-        self.power_pin = machine.Pin(module_power_gpio_pin, mode=machine.Pin.OUT)
+        self.power_pin = machine.Pin(module_dtr_gpio_pin, mode=machine.Pin.OUT)
         self.uart = machine.UART(self.port, self.uart_baudrate)
 
         self.module_power_state = False
@@ -75,10 +77,9 @@ class PicoSimcom868:
         self.last_command = None
         self.last_number = None
 
-    # TODO: It trigger DTR pin to wake up / make device sleep - change naming convention to reflect this
     def change_module_power_state(self, force_state=None):
         """
-        Change power level of the modem module.
+        Change power level of the modem module by pulsing DTR pin.
         Power level value would be stored in variable self.module_power_state.
         Assume that module power is turned off by default.
         :param force_state: Force module power state argument value
@@ -102,19 +103,16 @@ class PicoSimcom868:
 
     @staticmethod
     def parse_serial_raw_data(data) -> str:
-        # TODO: Find better way to handle None
-        if data is None: return data
-
         decoded_data = data.decode()
         if decoded_data.count('\n') == 2:
             decoded_data = decoded_data.split('\n')[1]
         return decoded_data.replace("\r", "").replace("\n", "")
 
     def read_uart_response(self):
-        if self.uart.txdone():
+        if self.uart.any():
             serial_read_raw_data = self.uart.read()
         else:
-            raise Exception("UART tx not done, could not read anything from serial.")
+            raise EmptySerialData("Empty serial data.")
         if serial_read_raw_data:
             return self.parse_serial_raw_data(serial_read_raw_data)
 
