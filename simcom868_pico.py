@@ -51,8 +51,6 @@ class GpsCoordinatesNotAcquired(Exception):
 class IncorrectCommandOutput(Exception):
     pass
 
-class EmptySerialData(Exception):
-    pass
 
 class PicoSimcom868:
     """
@@ -109,12 +107,12 @@ class PicoSimcom868:
         return decoded_data.replace("\r", "").replace("\n", "")
 
     def read_uart_response(self):
-        if self.uart.any():
-            serial_read_raw_data = self.uart.read()
-        else:
-            raise EmptySerialData("Empty serial data.")
+        serial_read_raw_data = self.uart.read()
         if serial_read_raw_data:
             return self.parse_serial_raw_data(serial_read_raw_data)
+        else:
+            print("Empty uart response")
+            return
 
     # TODO: Add to_byte conversion and command with response check. Inspirations:
     #  https://github.com/Ircama/raspberry-pi-sim800l-gsm-module/blob/master/sim800l/sim800l.py
